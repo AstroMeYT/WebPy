@@ -168,6 +168,9 @@
                     <button id="tab-fs" onclick="switchTab('fs')" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-t-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
                         <i class="fa-solid fa-folder-tree text-[11px]"></i> Files
                     </button>
+                    <button id="tab-packages" onclick="switchTab('packages')" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-t-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                        <i class="fa-solid fa-box text-[11px]"></i> Packages
+                    </button>
                 </div>
 
                 <button id="clear-console-btn" title="Clear Output" class="p-1 text-slate-400 hover:text-slate-200 text-xs transition">
@@ -187,7 +190,7 @@
                     <!-- Interactive Command & Prompt Input -->
                     <div id="input-container" class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2 transition-all duration-200">
                         <span id="input-prompt-symbol" class="text-emerald-400 font-bold">&gt;&gt;&gt;</span>
-                        <input id="interactive-input" type="text" placeholder="Type Python code..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
+                        <input id="interactive-input" type="text" placeholder="Type Python code or 'pip install <pkg>'..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
                         <button id="send-input-btn" class="px-2.5 py-1 bg-dark-700 hover:bg-dark-600 border border-dark-border rounded text-slate-300 text-xs font-medium transition">
                             <i id="send-icon" class="fa-solid fa-paper-plane"></i>
                         </button>
@@ -216,6 +219,32 @@
                     <div class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2">
                         <input id="new-filename-input" type="text" placeholder="filename.txt" class="flex-1 bg-dark-800 border border-dark-border px-2 py-1 rounded text-slate-300 text-xs">
                         <button id="create-file-btn" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium text-xs">Create</button>
+                    </div>
+                </div>
+
+                <!-- Package Manager Tab -->
+                <div id="content-packages" class="absolute inset-0 hidden flex flex-col p-3 text-xs space-y-3">
+                    <div class="border-b border-dark-border pb-2">
+                        <div class="font-medium text-slate-300 mb-1">Package Manager (micropip)</div>
+                        <p class="text-[11px] text-slate-500">Install Python packages from PyPI or Pyodide wheel library.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input id="pkg-name-input" type="text" placeholder="Package name (e.g., requests, sympy)" class="flex-1 bg-dark-800 border border-dark-border px-2.5 py-1.5 rounded text-slate-200 text-xs focus:outline-none focus:border-blue-500 code-font">
+                        <button id="install-pkg-btn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium text-xs transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-download text-[10px]"></i> Install
+                        </button>
+                    </div>
+                    <div class="pt-2">
+                        <span class="text-slate-400 font-medium text-[11px] block mb-2">Quick Install Popular Packages:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button onclick="installPackage('numpy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">numpy</button>
+                            <button onclick="installPackage('pandas')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">pandas</button>
+                            <button onclick="installPackage('matplotlib')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">matplotlib</button>
+                            <button onclick="installPackage('scipy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">scipy</button>
+                            <button onclick="installPackage('sympy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">sympy</button>
+                            <button onclick="installPackage('requests')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">requests</button>
+                            <button onclick="installPackage('beautifulsoup4')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">beautifulsoup4</button>
+                        </div>
                     </div>
                 </div>
 
@@ -461,6 +490,7 @@ print("Files in workspace:", os.listdir("."))
                 // Override Matplotlib & Input Hooks in Pyodide Python scope
                 await pyodide.runPythonAsync(`
 import sys, io, base64, builtins, ast, js, inspect
+import pyodide, pyodide.code
 
 def _setup_matplotlib_hook():
     try:
@@ -528,6 +558,9 @@ def _transform_and_run(user_code):
 _setup_matplotlib_hook()
 `);
 
+                // Pre-load micropip for dynamic library installation
+                await pyodide.loadPackage("micropip");
+
                 // Ready state
                 statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs";
                 statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
@@ -586,9 +619,13 @@ _setup_matplotlib_hook()
 
             try {
                 // Auto load standard imports if required
-                await pyodide.loadPackagesFromImports(code, {
-                    messageCallback: (msg) => appendConsole(`📦 ${msg}`, "system")
-                });
+                try {
+                    await pyodide.loadPackagesFromImports(code, {
+                        messageCallback: (msg) => appendConsole(`📦 ${msg}`, "system")
+                    });
+                } catch (pkgErr) {
+                    appendConsole(`📦 Notice: Checking packages via micropip (${pkgErr.message})...`, "system");
+                }
 
                 // Re-apply matplotlib hook
                 await pyodide.runPythonAsync(`_setup_matplotlib_hook()`);
@@ -596,7 +633,7 @@ _setup_matplotlib_hook()
                 // Execute Python code safely through input transformer
                 pyodide.globals.set("__user_code__", code);
                 let result = await pyodide.runPythonAsync(`
-import ast, inspect
+import ast, inspect, pyodide, pyodide.code
 transformed, is_transformed = _transform_and_run(__user_code__)
 if is_transformed:
     flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -605,7 +642,7 @@ if is_transformed:
     if inspect.iscoroutine(exec_res):
         await exec_res
 else:
-    await pyodide.eval_code_async(__user_code__, globals())
+    await pyodide.code.eval_code_async(__user_code__, globals())
 `);
 
                 if (result !== undefined && result !== null) {
@@ -643,24 +680,17 @@ else:
             }
         }
 
-        window.renderPlotImage = function (b64Data) {
-            const plotContainer = document.getElementById('plot-container');
-            const plotPlaceholder = document.getElementById('plot-placeholder');
-            const plotBadge = document.getElementById('plot-badge');
-
-            plotPlaceholder.classList.add('hidden');
-            plotContainer.classList.remove('hidden');
-
-            const imgCard = document.createElement('div');
-            imgCard.className = "bg-dark-800 border border-dark-border p-2 rounded-lg w-full flex justify-center";
-
-            const img = document.createElement('img');
-            img.src = `data:image/png;base64,${b64Data}`;
-            img.className = "rounded max-w-full h-auto";
-
-            imgCard.appendChild(img);
-            plotContainer.prepend(imgCard);
-            plotBadge.classList.remove('hidden');
+        window.installPackage = async function(pkgName) {
+            if (!pyodide || !pkgName) return;
+            switchTab('console');
+            appendConsole(`📦 Installing '${pkgName}'...`, 'system');
+            try {
+                const micropip = pyodide.pyimport('micropip');
+                await micropip.install(pkgName);
+                appendConsole(`✅ Package '${pkgName}' installed successfully! You can now import it in your script.`, 'system');
+            } catch (err) {
+                appendConsole(`❌ Failed to install '${pkgName}': ${err.message}`, 'error');
+            }
         };
 
         async function handleInteractiveInput() {
@@ -678,6 +708,13 @@ else:
             // Standard REPL Execution
             const trimmed = val.trim();
             if (!trimmed || !pyodide) return;
+
+            // Support pip install command directly in console
+            if (trimmed.startsWith('pip install ')) {
+                const pkg = trimmed.replace('pip install ', '').trim();
+                await installPackage(pkg);
+                return;
+            }
 
             appendConsole(`>>> ${trimmed}`, 'input');
 
@@ -741,7 +778,7 @@ else:
         };
 
         window.switchTab = function(tabName) {
-            ['console', 'plots', 'fs'].forEach(t => {
+            ['console', 'plots', 'fs', 'packages'].forEach(t => {
                 const btn = document.getElementById(`tab-${t}`);
                 const content = document.getElementById(`content-${t}`);
 
@@ -781,6 +818,15 @@ else:
             document.getElementById('send-input-btn').addEventListener('click', handleInteractiveInput);
             document.getElementById('interactive-input').addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') handleInteractiveInput();
+            });
+
+            document.getElementById('install-pkg-btn').addEventListener('click', () => {
+                const input = document.getElementById('pkg-name-input');
+                const pkg = input.value.trim();
+                if (pkg) {
+                    installPackage(pkg);
+                    input.value = '';
+                }
             });
 
             document.getElementById('create-file-btn').addEventListener('click', () => {
@@ -826,6 +872,3 @@ else:
                 }
             });
         });
-    </script>
-</body>
-</html>
