@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyWASM Studio</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0b0c10',
+                            800: '#12141d',
+                            700: '#1a1d27',
+                            600: '#262a38',
+                            border: '#222634'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-one_dark.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ext-language_tools.min.js"></script>
+
+    <!-- Pyodide Python WASM Engine -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0c10;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        /* Matte Dark Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #12141d;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262a38;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b82f6;
+        }
+
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Resizer handle styling */
+        .resizer-h {
+            cursor: col-resize;
+            width: 4px;
+            transition: background-color 0.2s;
+        }
+        .resizer-h:hover, .resizer-h.active {
+            background-color: #3b82f6;
+        }
+
+        #ace-editor {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            font-size: 13px;
+        }
+
+        .terminal-line {
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col bg-dark-900 text-slate-200 antialiased">
+
+    <header class="h-12 border-b border-dark-border bg-dark-800/90 px-4 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center justify-center w-7 h-7 rounded-md bg-blue-600 text-white font-bold text-sm shadow">
+                <i class="fa-brands fa-python"></i>
+            </div>
+            <span class="font-bold text-slate-100 tracking-wide text-sm flex items-center gap-2">
+                PyWASM Studio
+            </span>
+        </div>
+
+        <!-- Central Actions -->
+        <div class="flex items-center space-x-2">
+            <!-- Sample Loader -->
+            <select id="template-select" class="bg-dark-700 hover:bg-dark-600 text-slate-300 text-xs rounded-md px-2.5 py-1.5 border border-dark-border focus:outline-none focus:border-blue-500 cursor-pointer transition">
+                <option value="" disabled selected>⚡ Load Sample</option>
+                <option value="hello">1. Hello World</option>
+                <option value="math">2. Math & Algorithms</option>
+                <option value="input">3. Interactive Input (input())</option>
+                <option value="plot">4. Matplotlib Visualization</option>
+                <option value="async">5. Async Task Execution</option>
+                <option value="files">6. File System Input/Output</option>
+            </select>
+
+            <div class="h-4 w-[1px] bg-dark-border mx-1"></div>
+
+            <!-- Clear Editor -->
+            <button id="clear-editor-btn" title="Clear Editor" class="px-2.5 py-1.5 text-xs rounded-md bg-dark-700 hover:bg-dark-600 border border-dark-border text-slate-400 hover:text-slate-200 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+            </button>
+
+            <!-- Run Button -->
+            <button id="run-btn" disabled class="px-3.5 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-dark-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition active:scale-95 shadow-sm">
+                <i id="run-icon" class="fa-solid fa-play text-[10px]"></i>
+                <span id="run-text">Run Script</span>
+            </button>
+        </div>
+
+        <!-- Status Indicator -->
+        <div class="flex items-center">
+            <div id="status-pill" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="status-text">Booting Python Engine...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden relative">
+
+        <!-- Code Editor Panel -->
+        <section id="editor-panel" class="flex-1 flex flex-col min-w-[300px] bg-dark-900 border-r border-dark-border relative">
+            <div id="ace-editor"></div>
+        </section>
+
+        <!-- Horizontal Resizer Bar -->
+        <div id="resizer-h" class="resizer-h bg-dark-border hover:bg-blue-500/50"></div>
+
+        <!-- Right Output Panel -->
+        <section id="output-panel" class="w-[480px] flex flex-col min-w-[280px] bg-dark-900">
+            <!-- Tabs Bar -->
+            <div class="h-9 bg-dark-800 border-b border-dark-border px-2 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-1">
+                    <button id="tab-console" onclick="switchTab('console')" class="tab-btn active px-3 py-1.5 text-xs font-medium rounded-t-md bg-dark-900 text-blue-400 border-t-2 border-blue-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-terminal text-[11px]"></i> Console
+                    </button>
+                    <button id="tab-plots" onclick="switchTab('plots')" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-t-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 relative">
+                        <i class="fa-solid fa-chart-line text-[11px]"></i> Graphics
+                        <span id="plot-badge" class="hidden w-2 h-2 rounded-full bg-emerald-400"></span>
+                    </button>
+                    <button id="tab-fs" onclick="switchTab('fs')" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-t-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                        <i class="fa-solid fa-folder-tree text-[11px]"></i> Files
+                    </button>
+                </div>
+
+                <button id="clear-console-btn" title="Clear Output" class="p-1 text-slate-400 hover:text-slate-200 text-xs transition">
+                    <i class="fa-solid fa-ban"></i>
+                </button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="flex-1 relative overflow-hidden bg-dark-900">
+                
+                <!-- Terminal Console -->
+                <div id="content-console" class="absolute inset-0 flex flex-col p-3 code-font text-xs overflow-y-auto">
+                    <div id="console-output" class="flex-1 space-y-1 font-mono">
+                        <div class="text-slate-500 italic mb-2">System initialized. Script results will appear below.</div>
+                    </div>
+
+                    <!-- Interactive Command & Prompt Input -->
+                    <div id="input-container" class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2 transition-all duration-200">
+                        <span id="input-prompt-symbol" class="text-emerald-400 font-bold">&gt;&gt;&gt;</span>
+                        <input id="interactive-input" type="text" placeholder="Type Python code..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
+                        <button id="send-input-btn" class="px-2.5 py-1 bg-dark-700 hover:bg-dark-600 border border-dark-border rounded text-slate-300 text-xs font-medium transition">
+                            <i id="send-icon" class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Graphics Viewer -->
+                <div id="content-plots" class="absolute inset-0 hidden flex flex-col p-4 overflow-y-auto items-center justify-center">
+                    <div id="plot-placeholder" class="text-center text-slate-500 space-y-2">
+                        <i class="fa-solid fa-chart-area text-3xl text-dark-600"></i>
+                        <p class="text-xs">No graphical plot generated yet.</p>
+                        <p class="text-[11px] text-slate-600">Run a script with <code class="text-blue-400">matplotlib.pyplot</code> to view output.</p>
+                    </div>
+                    <div id="plot-container" class="w-full flex flex-col items-center gap-4 hidden"></div>
+                </div>
+
+                <!-- Virtual File Explorer -->
+                <div id="content-fs" class="absolute inset-0 hidden flex flex-col p-3 text-xs">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-dark-border">
+                        <span class="font-medium text-slate-300">Pyodide Virtual FS (/home/pyodide)</span>
+                        <button id="refresh-fs-btn" class="text-slate-400 hover:text-slate-200 transition">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+                    <div id="fs-tree" class="flex-1 overflow-y-auto space-y-1 code-font"></div>
+                    <div class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2">
+                        <input id="new-filename-input" type="text" placeholder="filename.txt" class="flex-1 bg-dark-800 border border-dark-border px-2 py-1 rounded text-slate-300 text-xs">
+                        <button id="create-file-btn" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium text-xs">Create</button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let pyodide = null;
+        let aceEditor = null;
+        let isExecuting = false;
+        let pendingInputResolver = null;
+
+        const CODE_PRESETS = {
+            hello: `# Python WASM Studio
+import sys
+import platform
+
+print("🐍 Welcome to PyWASM Studio!")
+print(f"Python Version: {sys.version.split()[0]}")
+print(f"Platform: {platform.platform()}")
+print("----------------------------------------")
+
+def fibonacci(n):
+    a, b = 0, 1
+    res = []
+    for _ in range(n):
+        res.append(a)
+        a, b = b, a + b
+    return res
+
+print(f"Fibonacci(10): {fibonacci(10)}")
+`,
+            math: `# Math & Prime Calculations
+import math
+
+angles = [0, 30, 45, 60, 90]
+for deg in angles:
+    rad = math.radians(deg)
+    print(f"Angle: {deg:2d}° | Sin: {math.sin(rad):.4f} | Cos: {math.cos(rad):.4f}")
+
+def is_prime(n):
+    if n <= 1: return False
+    for i in range(2, int(math.isqrt(n)) + 1):
+        if n % i == 0: return False
+    return True
+
+primes = [x for x in range(1, 100) if is_prime(x)]
+print(f"\\nPrimes up to 100 ({len(primes)} total):\\n{primes}")
+`,
+            input: `# Interactive Input Example
+print("🤖 Welcome to PyWASM Interactive Assistant!")
+
+name = input("What is your name? ")
+print(f"Nice to meet you, {name}!")
+
+age_str = input("How old are you? ")
+try:
+    age = int(age_str)
+    print(f"Awesome! In 10 years, you will be {age + 10} years old.")
+except ValueError:
+    print(f"'{age_str}' isn't a number, but that's alright!")
+
+favorite_color = input("What is your favorite color? ")
+print(f"🎨 {favorite_color.capitalize()} is a great color!")
+`,
+            plot: `# Matplotlib Graphic Rendering
+import numpy as np
+import matplotlib.pyplot as plt
+
+x = np.linspace(0, 4 * np.pi, 200)
+y1 = np.sin(x)
+y2 = np.cos(x)
+
+plt.figure(figsize=(6, 3.5), facecolor='#12141d')
+ax = plt.axes()
+ax.set_facecolor('#1a1d27')
+
+plt.plot(x, y1, label='Sine', color='#3b82f6', linewidth=2)
+plt.plot(x, y2, label='Cosine', color='#10b981', linewidth=2, linestyle='--')
+
+plt.title('Sine & Cosine Waves', color='#e2e8f0', fontsize=11)
+ax.tick_params(colors='#94a3b8', which='both')
+for spine in ax.spines.values():
+    spine.set_color('#262a38')
+
+plt.grid(True, color='#262a38', linestyle=':', alpha=0.6)
+plt.legend(facecolor='#12141d', edgecolor='#262a38', labelcolor='#e2e8f0')
+
+plt.show()
+print("Plot generated in Graphics tab!")
+`,
+            async: `# Async Execution
+import asyncio
+
+async def fetch_task(name, delay):
+    print(f"Starting Task {name}...")
+    await asyncio.sleep(delay)
+    print(f"--> Task {name} complete!")
+
+async def main():
+    print("Initiating async pipeline...")
+    await asyncio.gather(
+        fetch_task("A", 0.5),
+        fetch_task("B", 0.8)
+    )
+    print("All tasks finished successfully.")
+
+asyncio.run(main())
+`,
+            files: `# Virtual File System
+import os
+
+filename = "sample.txt"
+with open(filename, "w") as f:
+    f.write("Line 1: PyWASM Studio Virtual File\\n")
+    f.write("Line 2: Running completely client-side in WASM\\n")
+
+print(f"Created file: {filename}")
+with open(filename, "r") as f:
+    print("\\nFile Contents:\\n" + f.read())
+
+print("Files in workspace:", os.listdir("."))
+`
+        };
+
+        function initEditor() {
+            aceEditor = ace.edit("ace-editor");
+            aceEditor.setTheme("ace/theme/one_dark");
+            aceEditor.session.setMode("ace/mode/python");
+            aceEditor.setValue(CODE_PRESETS.hello, -1);
+            aceEditor.setOptions({
+                fontSize: "13px",
+                fontFamily: "'JetBrains Mono', monospace",
+                showPrintMargin: false,
+                enableBasicAutocompletion: true,
+                enableLiveAutocompletion: true,
+                tabSize: 4,
+                useSoftTabs: true
+            });
+
+            // Ctrl+Enter or Cmd+Enter to Execute
+            aceEditor.commands.addCommand({
+                name: 'runScript',
+                bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
+                exec: function() {
+                    if (!isExecuting && pyodide) runPythonScript();
+                }
+            });
+        }
+
+        window.requestConsoleInput = function(promptText) {
+            return new Promise((resolve) => {
+                // Switch Console tab into active input mode
+                switchTab('console');
+
+                const consoleOutput = document.getElementById('console-output');
+                const line = document.createElement('div');
+                line.className = 'terminal-line font-mono text-xs py-0.5 flex flex-wrap items-center gap-x-1';
+
+                const promptSpan = document.createElement('span');
+                promptSpan.className = 'text-slate-200 whitespace-pre-wrap';
+                promptSpan.textContent = promptText || '';
+
+                const inlineInput = document.createElement('input');
+                inlineInput.type = 'text';
+                inlineInput.className = 'bg-transparent border-none outline-none text-amber-300 font-mono text-xs p-0 m-0 flex-1 min-w-[80px] focus:ring-0 focus:outline-none';
+                inlineInput.autocomplete = 'off';
+                inlineInput.spellcheck = false;
+
+                line.appendChild(promptSpan);
+                line.appendChild(inlineInput);
+                consoleOutput.appendChild(line);
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+
+                const inputField = document.getElementById('interactive-input');
+                const symbol = document.getElementById('input-prompt-symbol');
+                inputField.value = '';
+                inputField.placeholder = "Type response or press Enter above...";
+                inputField.classList.add('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
+                symbol.className = "text-amber-400 font-bold animate-pulse";
+                symbol.innerText = "INPUT>";
+
+                setTimeout(() => inlineInput.focus(), 50);
+
+                function submitVal(val) {
+                    const valSpan = document.createElement('span');
+                    valSpan.className = 'text-amber-300 font-semibold whitespace-pre-wrap';
+                    valSpan.textContent = val;
+                    if (line.contains(inlineInput)) {
+                        line.replaceChild(valSpan, inlineInput);
+                    }
+                    pendingInputResolver = null;
+                    resetInputMode();
+                    resolve(val);
+                }
+
+                pendingInputResolver = submitVal;
+
+                inlineInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitVal(inlineInput.value);
+                    }
+                });
+            });
+        };
+
+        function resetInputMode() {
+            const inputField = document.getElementById('interactive-input');
+            const symbol = document.getElementById('input-prompt-symbol');
+            
+            inputField.placeholder = "Type Python code...";
+            inputField.classList.remove('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
+            symbol.className = "text-emerald-400 font-bold";
+            symbol.innerText = ">>>";
+        }
+
+        async function initPyodideEngine() {
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            const statusPill = document.getElementById('status-pill');
+            const runBtn = document.getElementById('run-btn');
+
+            try {
+                statusText.innerText = "Loading WASM...";
+                
+                pyodide = await loadPyodide({
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.1/full/",
+                    stdout: (text) => appendConsole(text, 'stdout'),
+                    stderr: (text) => appendConsole(text, 'stderr'),
+                    stdin: () => {
+                        try {
+                            const res = window.prompt("Input requested by Python script:");
+                            return res !== null ? res + "\n" : "";
+                        } catch (e) {
+                            return "";
+                        }
+                    }
+                });
+
+                // Override Matplotlib & Input Hooks in Pyodide Python scope
+                await pyodide.runPythonAsync(`
+import sys, io, base64, builtins, ast, js, inspect
+
+def _setup_matplotlib_hook():
+    try:
+        import matplotlib
+        matplotlib.use('agg')
+        import matplotlib.pyplot as plt
+        
+        def custom_show(*args, **kwargs):
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+            buf.seek(0)
+            img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+            plt.close('all')
+            
+            import js
+            js.renderPlotImage(img_b64)
+            
+        plt.show = custom_show
+    except Exception:
+        pass
+
+async def _custom_input(prompt=""):
+    p_str = str(prompt) if prompt is not None else ""
+    val = await js.requestConsoleInput(p_str)
+    return str(val)
+
+builtins.input = _custom_input
+
+class AsyncInputTransformer(ast.NodeTransformer):
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        if isinstance(node.func, ast.Name) and node.func.id == 'input':
+            return ast.Await(value=node)
+        return node
+
+    def visit_FunctionDef(self, node):
+        self.generic_visit(node)
+        has_await = any(isinstance(child, ast.Await) for child in ast.walk(node))
+        if has_await:
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=node.body,
+                decorator_list=node.decorator_list,
+                returns=node.returns
+            )
+        return node
+
+def _transform_and_run(user_code):
+    try:
+        parsed = ast.parse(user_code)
+        has_input = any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'input'
+            for node in ast.walk(parsed)
+        )
+        if has_input:
+            transformer = AsyncInputTransformer()
+            transformed = transformer.visit(parsed)
+            ast.fix_missing_locations(transformed)
+            return transformed, True
+    except Exception:
+        pass
+    return user_code, False
+
+_setup_matplotlib_hook()
+`);
+
+                // Ready state
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs";
+                statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                statusText.innerText = "Python WASM Ready";
+                runBtn.disabled = false;
+
+                appendConsole("✅ Pyodide Python engine initialized.", "system");
+                refreshVirtualFS();
+
+            } catch (err) {
+                console.error("Pyodide error:", err);
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs";
+                statusDot.className = "w-2 h-2 rounded-full bg-red-400";
+                statusText.innerText = "Failed to load WASM";
+                appendConsole(`❌ Engine initialization failed: ${err.message}`, "error");
+            }
+        }
+
+        function appendConsole(text, type = 'stdout') {
+            const consoleOutput = document.getElementById('console-output');
+            const line = document.createElement('div');
+            line.className = 'terminal-line font-mono text-xs py-0.5';
+
+            if (type === 'stdout') line.className += ' text-slate-200';
+            else if (type === 'stderr' || type === 'error') line.className += ' text-red-400 font-semibold';
+            else if (type === 'system') line.className += ' text-blue-400 italic';
+            else if (type === 'input') line.className += ' text-amber-300 font-bold';
+            else if (type === 'result') line.className += ' text-emerald-400 font-semibold';
+
+            line.textContent = text;
+            consoleOutput.appendChild(line);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function clearConsole() {
+            if (pendingInputResolver) {
+                pendingInputResolver("");
+            }
+            const consoleOutput = document.getElementById('console-output');
+            if (consoleOutput) {
+                consoleOutput.innerHTML = '';
+            }
+        }
+
+        async function runPythonScript() {
+            if (isExecuting || !pyodide) return;
+
+            const code = aceEditor.getValue();
+            if (!code.trim()) return;
+
+            // Automatically clear console output on script execution
+            clearConsole();
+
+            isExecuting = true;
+            updateRunButtonState(true);
+
+            try {
+                // Auto load standard imports if required
+                await pyodide.loadPackagesFromImports(code, {
+                    messageCallback: (msg) => appendConsole(`📦 ${msg}`, "system")
+                });
+
+                // Re-apply matplotlib hook
+                await pyodide.runPythonAsync(`_setup_matplotlib_hook()`);
+
+                // Execute Python code safely through input transformer
+                pyodide.globals.set("__user_code__", code);
+                let result = await pyodide.runPythonAsync(`
+import ast, inspect
+transformed, is_transformed = _transform_and_run(__user_code__)
+if is_transformed:
+    flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+    compiled = compile(transformed, filename="<string>", mode="exec", flags=flags)
+    exec_res = eval(compiled, globals())
+    if inspect.iscoroutine(exec_res):
+        await exec_res
+else:
+    await pyodide.eval_code_async(__user_code__, globals())
+`);
+
+                if (result !== undefined && result !== null) {
+                    appendConsole(String(result), 'result');
+                }
+
+                refreshVirtualFS();
+
+            } catch (err) {
+                appendConsole(`Traceback (most recent call last):\n${err.message}`, "error");
+            } finally {
+                if (pendingInputResolver) {
+                    pendingInputResolver("");
+                }
+                isExecuting = false;
+                updateRunButtonState(false);
+            }
+        }
+
+        function updateRunButtonState(running) {
+            const runBtn = document.getElementById('run-btn');
+            const runIcon = document.getElementById('run-icon');
+            const runText = document.getElementById('run-text');
+
+            if (running) {
+                runBtn.disabled = true;
+                runBtn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-md bg-dark-700 text-slate-400 cursor-wait flex items-center gap-1.5";
+                runIcon.className = "fa-solid fa-spinner animate-spin text-blue-400 text-[10px]";
+                runText.innerText = "Running...";
+            } else {
+                runBtn.disabled = false;
+                runBtn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition active:scale-95 shadow-sm";
+                runIcon.className = "fa-solid fa-play text-[10px]";
+                runText.innerText = "Run Script";
+            }
+        }
+
+        window.renderPlotImage = function (b64Data) {
+            const plotContainer = document.getElementById('plot-container');
+            const plotPlaceholder = document.getElementById('plot-placeholder');
+            const plotBadge = document.getElementById('plot-badge');
+
+            plotPlaceholder.classList.add('hidden');
+            plotContainer.classList.remove('hidden');
+
+            const imgCard = document.createElement('div');
+            imgCard.className = "bg-dark-800 border border-dark-border p-2 rounded-lg w-full flex justify-center";
+
+            const img = document.createElement('img');
+            img.src = `data:image/png;base64,${b64Data}`;
+            img.className = "rounded max-w-full h-auto";
+
+            imgCard.appendChild(img);
+            plotContainer.prepend(imgCard);
+            plotBadge.classList.remove('hidden');
+        };
+
+        async function handleInteractiveInput() {
+            const inputField = document.getElementById('interactive-input');
+            const val = inputField.value;
+            inputField.value = '';
+
+            // Handle pending Python input() request
+            if (pendingInputResolver) {
+                const resolve = pendingInputResolver;
+                resolve(val);
+                return;
+            }
+
+            // Standard REPL Execution
+            const trimmed = val.trim();
+            if (!trimmed || !pyodide) return;
+
+            appendConsole(`>>> ${trimmed}`, 'input');
+
+            try {
+                let res = await pyodide.runPythonAsync(trimmed);
+                if (res !== undefined) appendConsole(String(res), 'result');
+            } catch (err) {
+                appendConsole(err.message, 'error');
+            }
+        }
+
+        async function refreshVirtualFS() {
+            if (!pyodide) return;
+            const fsTree = document.getElementById('fs-tree');
+            fsTree.innerHTML = '';
+
+            try {
+                const files = pyodide.FS.readdir('/home/pyodide');
+                for (const f of files) {
+                    if (f === '.' || f === '..') continue;
+
+                    const stat = pyodide.FS.stat(`/home/pyodide/${f}`);
+                    const isDir = pyodide.FS.isDir(stat.mode);
+
+                    const item = document.createElement('div');
+                    item.className = "flex items-center justify-between p-1.5 rounded hover:bg-dark-800 text-slate-300 group";
+
+                    item.innerHTML = `
+                        <div class="flex items-center space-x-2 truncate">
+                            <i class="${isDir ? 'fa-solid fa-folder text-amber-400' : 'fa-regular fa-file text-blue-400'}"></i>
+                            <span class="truncate">${f}</span>
+                        </div>
+                        <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-1">
+                            ${!isDir ? `<button onclick="readVirtualFile('${f}')" title="View" class="p-1 text-slate-400 hover:text-blue-400"><i class="fa-solid fa-eye"></i></button>` : ''}
+                            <button onclick="deleteVirtualFile('${f}')" title="Delete" class="p-1 text-slate-400 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    `;
+                    fsTree.appendChild(item);
+                }
+            } catch (err) {
+                console.error("FS Error:", err);
+            }
+        }
+
+        window.readVirtualFile = function(fileName) {
+            try {
+                const content = pyodide.FS.readFile(`/home/pyodide/${fileName}`, { encoding: 'utf8' });
+                if (aceEditor) aceEditor.setValue(content, -1);
+            } catch (err) {
+                appendConsole(`File read failed: ${err.message}`, 'error');
+            }
+        };
+
+        window.deleteVirtualFile = function(fileName) {
+            try {
+                pyodide.FS.unlink(`/home/pyodide/${fileName}`);
+                refreshVirtualFS();
+            } catch (err) {
+                appendConsole(`Delete failed: ${err.message}`, 'error');
+            }
+        };
+
+        window.switchTab = function(tabName) {
+            ['console', 'plots', 'fs'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                const content = document.getElementById(`content-${t}`);
+
+                if (t === tabName) {
+                    btn.className = "tab-btn active px-3 py-1.5 text-xs font-medium rounded-t-md bg-dark-900 text-blue-400 border-t-2 border-blue-500 flex items-center gap-1.5";
+                    content.classList.remove('hidden');
+                } else {
+                    btn.className = "tab-btn px-3 py-1.5 text-xs font-medium rounded-t-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5";
+                    content.classList.add('hidden');
+                }
+            });
+
+            if (tabName === 'plots') {
+                document.getElementById('plot-badge').classList.add('hidden');
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initEditor();
+            initPyodideEngine();
+
+            document.getElementById('run-btn').addEventListener('click', runPythonScript);
+
+            document.getElementById('template-select').addEventListener('change', (e) => {
+                const key = e.target.value;
+                if (CODE_PRESETS[key] && aceEditor) {
+                    aceEditor.setValue(CODE_PRESETS[key], -1);
+                }
+            });
+
+            document.getElementById('clear-console-btn').addEventListener('click', clearConsole);
+
+            document.getElementById('clear-editor-btn').addEventListener('click', () => {
+                if (aceEditor) aceEditor.setValue('', -1);
+            });
+
+            document.getElementById('send-input-btn').addEventListener('click', handleInteractiveInput);
+            document.getElementById('interactive-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleInteractiveInput();
+            });
+
+            document.getElementById('create-file-btn').addEventListener('click', () => {
+                const input = document.getElementById('new-filename-input');
+                const name = input.value.trim();
+                if (name && pyodide) {
+                    try {
+                        pyodide.FS.writeFile(`/home/pyodide/${name}`, '# New file\n');
+                        input.value = '';
+                        refreshVirtualFS();
+                    } catch (err) {
+                        appendConsole(`Create file failed: ${err.message}`, 'error');
+                    }
+                }
+            });
+
+            document.getElementById('refresh-fs-btn').addEventListener('click', refreshVirtualFS);
+
+            // Resizer logic
+            const resizerH = document.getElementById('resizer-h');
+            const outputPanel = document.getElementById('output-panel');
+            let isResizing = false;
+
+            resizerH.addEventListener('mousedown', () => {
+                isResizing = true;
+                resizerH.classList.add('active');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const containerWidth = document.body.clientWidth;
+                const newWidth = containerWidth - e.clientX;
+                if (newWidth > 220 && newWidth < containerWidth - 250) {
+                    outputPanel.style.width = `${newWidth}px`;
+                    if (aceEditor) aceEditor.resize();
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    resizerH.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
