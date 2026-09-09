@@ -31,6 +31,7 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Ace Editor Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-python.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-one_dark.min.js"></script>
@@ -49,7 +50,7 @@
             overflow: hidden;
         }
 
-        /* Matte Dark Custom Scrollbar */
+        /* Custom Scrollbars */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -124,7 +125,7 @@
 
             <!-- Clear Editor -->
             <button id="clear-editor-btn" title="Clear Editor" class="px-2.5 py-1.5 text-xs rounded-md bg-dark-700 hover:bg-dark-600 border border-dark-border text-slate-400 hover:text-slate-200 transition">
-                <i class="fa-solid fa-trash-can"></i> Clear
+                <i class="fa-solid fa-trash-can"></i> Clear Code
             </button>
 
             <!-- Run Button -->
@@ -136,7 +137,7 @@
 
         <!-- Status Indicator -->
         <div class="flex items-center">
-            <div id="status-pill" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+            <div id="status-pill" onclick="retryPyodideInit()" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer transition" title="Click to reload engine if needed">
                 <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
                 <span id="status-text">Booting Python Engine...</span>
             </div>
@@ -173,7 +174,7 @@
                     </button>
                 </div>
 
-                <button id="clear-console-btn" title="Clear Output" class="p-1 text-slate-400 hover:text-slate-200 text-xs transition">
+                <button id="clear-console-btn" title="Clear Console Output" class="p-1 text-slate-400 hover:text-slate-200 text-xs transition">
                     <i class="fa-solid fa-ban"></i>
                 </button>
             </div>
@@ -190,7 +191,7 @@
                     <!-- Interactive Command & Prompt Input -->
                     <div id="input-container" class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2 transition-all duration-200">
                         <span id="input-prompt-symbol" class="text-emerald-400 font-bold">&gt;&gt;&gt;</span>
-                        <input id="interactive-input" type="text" placeholder="Type Python code or 'pip install <pkg>'..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
+                        <input id="interactive-input" type="text" placeholder="Type Python code or input response..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
                         <button id="send-input-btn" class="px-2.5 py-1 bg-dark-700 hover:bg-dark-600 border border-dark-border rounded text-slate-300 text-xs font-medium transition">
                             <i id="send-icon" class="fa-solid fa-paper-plane"></i>
                         </button>
@@ -211,7 +212,7 @@
                 <div id="content-fs" class="absolute inset-0 hidden flex flex-col p-3 text-xs">
                     <div class="flex items-center justify-between pb-2 mb-2 border-b border-dark-border">
                         <span class="font-medium text-slate-300">Pyodide Virtual FS (/home/pyodide)</span>
-                        <button id="refresh-fs-btn" class="text-slate-400 hover:text-slate-200 transition">
+                        <button id="refresh-fs-btn" class="text-slate-400 hover:text-slate-200 transition" title="Refresh files">
                             <i class="fa-solid fa-arrows-rotate"></i>
                         </button>
                     </div>
@@ -226,16 +227,16 @@
                 <div id="content-packages" class="absolute inset-0 hidden flex flex-col p-3 text-xs space-y-3">
                     <div class="border-b border-dark-border pb-2">
                         <div class="font-medium text-slate-300 mb-1">Package Manager (micropip)</div>
-                        <p class="text-[11px] text-slate-500">Install Python packages from PyPI or Pyodide wheel library.</p>
+                        <p class="text-[11px] text-slate-500">Install Python packages dynamically from PyPI or WebAssembly wheels.</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <input id="pkg-name-input" type="text" placeholder="Package name (e.g., requests, sympy)" class="flex-1 bg-dark-800 border border-dark-border px-2.5 py-1.5 rounded text-slate-200 text-xs focus:outline-none focus:border-blue-500 code-font">
+                        <input id="pkg-name-input" type="text" placeholder="Package name (e.g. sympy, requests)" class="flex-1 bg-dark-800 border border-dark-border px-2.5 py-1.5 rounded text-slate-200 text-xs focus:outline-none focus:border-blue-500 code-font">
                         <button id="install-pkg-btn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium text-xs transition flex items-center gap-1.5">
                             <i class="fa-solid fa-download text-[10px]"></i> Install
                         </button>
                     </div>
                     <div class="pt-2">
-                        <span class="text-slate-400 font-medium text-[11px] block mb-2">Quick Install Popular Packages:</span>
+                        <span class="text-slate-400 font-medium text-[11px] block mb-2">Quick Install Libraries:</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button onclick="installPackage('numpy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">numpy</button>
                             <button onclick="installPackage('pandas')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">pandas</button>
@@ -258,7 +259,9 @@
         let aceEditor = null;
         let isExecuting = false;
         let pendingInputResolver = null;
+        let activeInlineInput = null;
 
+        // Code Presets
         const CODE_PRESETS = {
             hello: `# Python WASM Studio
 import sys
@@ -373,75 +376,126 @@ print("Files in workspace:", os.listdir("."))
         };
 
         function initEditor() {
-            aceEditor = ace.edit("ace-editor");
-            aceEditor.setTheme("ace/theme/one_dark");
-            aceEditor.session.setMode("ace/mode/python");
-            aceEditor.setValue(CODE_PRESETS.hello, -1);
-            aceEditor.setOptions({
-                fontSize: "13px",
-                fontFamily: "'JetBrains Mono', monospace",
-                showPrintMargin: false,
-                enableBasicAutocompletion: true,
-                enableLiveAutocompletion: true,
-                tabSize: 4,
-                useSoftTabs: true
-            });
+            try {
+                if (typeof ace === 'undefined') return;
+                aceEditor = ace.edit("ace-editor");
+                aceEditor.setTheme("ace/theme/one_dark");
+                aceEditor.session.setMode("ace/mode/python");
+                aceEditor.setValue(CODE_PRESETS.hello, -1);
+                aceEditor.setOptions({
+                    fontSize: "13px",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    showPrintMargin: false,
+                    enableBasicAutocompletion: true,
+                    enableLiveAutocompletion: true,
+                    tabSize: 4,
+                    useSoftTabs: true
+                });
 
-            // Ctrl+Enter or Cmd+Enter to Execute
-            aceEditor.commands.addCommand({
-                name: 'runScript',
-                bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
-                exec: function() {
-                    if (!isExecuting && pyodide) runPythonScript();
-                }
-            });
+                aceEditor.commands.addCommand({
+                    name: 'runScript',
+                    bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
+                    exec: function() {
+                        if (!isExecuting && pyodide) runPythonScript();
+                    }
+                });
+            } catch (err) {
+                console.warn("Ace editor init warning:", err);
+            }
+        }
+
+        function clearConsole() {
+            const consoleOutput = document.getElementById('console-output');
+            if (consoleOutput) {
+                consoleOutput.innerHTML = '<div class="text-slate-500 italic mb-2">Console cleared. Running script...</div>';
+            }
+            resetInputMode();
+        }
+
+        function appendConsole(text, type = 'stdout') {
+            const consoleOutput = document.getElementById('console-output');
+            if (!consoleOutput) return;
+
+            const line = document.createElement('div');
+            line.className = 'terminal-line font-mono text-xs my-0.5';
+
+            if (type === 'stderr' || type === 'error') {
+                line.className += ' text-red-400';
+            } else if (type === 'system') {
+                line.className += ' text-blue-400 font-medium';
+            } else if (type === 'input') {
+                line.className += ' text-emerald-400';
+            } else {
+                line.className += ' text-slate-200';
+            }
+
+            line.textContent = text;
+            consoleOutput.appendChild(line);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function resetInputMode() {
+            const inputField = document.getElementById('interactive-input');
+            const symbol = document.getElementById('input-prompt-symbol');
+            
+            if (inputField) {
+                inputField.value = '';
+                inputField.placeholder = "Type Python code or input response...";
+                inputField.classList.remove('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
+            }
+            if (symbol) {
+                symbol.className = "text-emerald-400 font-bold";
+                symbol.innerText = ">>>";
+            }
+            activeInlineInput = null;
         }
 
         window.requestConsoleInput = function(promptText) {
-            return new Promise((resolve) => {
-                // Switch Console tab into active input mode
-                switchTab('console');
+            switchTab('console');
+            const consoleOutput = document.getElementById('console-output');
+            
+            const promptLine = document.createElement('div');
+            promptLine.className = 'terminal-line font-mono text-xs my-0.5 flex items-center flex-wrap gap-1 text-amber-300';
+            
+            const promptSpan = document.createElement('span');
+            promptSpan.textContent = promptText;
+            promptLine.appendChild(promptSpan);
 
-                const consoleOutput = document.getElementById('console-output');
-                const line = document.createElement('div');
-                line.className = 'terminal-line font-mono text-xs py-0.5 flex flex-wrap items-center gap-x-1';
+            const inlineInput = document.createElement('input');
+            inlineInput.type = 'text';
+            inlineInput.className = 'bg-dark-800 text-slate-100 border border-amber-500/50 rounded px-1.5 py-0.5 code-font text-xs focus:outline-none focus:border-amber-400 flex-1 min-w-[120px]';
+            promptLine.appendChild(inlineInput);
 
-                const promptSpan = document.createElement('span');
-                promptSpan.className = 'text-slate-200 whitespace-pre-wrap';
-                promptSpan.textContent = promptText || '';
+            consoleOutput.appendChild(promptLine);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
 
-                const inlineInput = document.createElement('input');
-                inlineInput.type = 'text';
-                inlineInput.className = 'bg-transparent border-none outline-none text-amber-300 font-mono text-xs p-0 m-0 flex-1 min-w-[80px] focus:ring-0 focus:outline-none';
-                inlineInput.autocomplete = 'off';
-                inlineInput.spellcheck = false;
+            inlineInput.focus();
+            activeInlineInput = inlineInput;
 
-                line.appendChild(promptSpan);
-                line.appendChild(inlineInput);
-                consoleOutput.appendChild(line);
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-
-                const inputField = document.getElementById('interactive-input');
-                const symbol = document.getElementById('input-prompt-symbol');
-                inputField.value = '';
-                inputField.placeholder = "Type response or press Enter above...";
-                inputField.classList.add('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
+            // Highlight bottom input bar as well
+            const bottomInput = document.getElementById('interactive-input');
+            const symbol = document.getElementById('input-prompt-symbol');
+            if (bottomInput) {
+                bottomInput.placeholder = promptText || "Input requested...";
+                bottomInput.classList.add('border-amber-500', 'bg-amber-950/20');
+            }
+            if (symbol) {
                 symbol.className = "text-amber-400 font-bold animate-pulse";
-                symbol.innerText = "INPUT>";
+                symbol.innerText = "INP>";
+            }
 
-                setTimeout(() => inlineInput.focus(), 50);
-
-                function submitVal(val) {
+            return new Promise((resolve) => {
+                const submitVal = (val) => {
+                    const finalVal = val !== undefined ? val : inlineInput.value;
+                    promptLine.removeChild(inlineInput);
                     const valSpan = document.createElement('span');
-                    valSpan.className = 'text-amber-300 font-semibold whitespace-pre-wrap';
-                    valSpan.textContent = val;
-                    if (line.contains(inlineInput)) {
-                        line.replaceChild(valSpan, inlineInput);
-                    }
-                    pendingInputResolver = null;
+                    valSpan.className = 'text-emerald-400 font-semibold ml-1';
+                    valSpan.textContent = finalVal;
+                    promptLine.appendChild(valSpan);
+                    
                     resetInputMode();
-                    resolve(val);
-                }
+                    resolve(finalVal);
+                };
 
                 pendingInputResolver = submitVal;
 
@@ -454,14 +508,34 @@ print("Files in workspace:", os.listdir("."))
             });
         };
 
-        function resetInputMode() {
+        function handleInteractiveInput() {
             const inputField = document.getElementById('interactive-input');
-            const symbol = document.getElementById('input-prompt-symbol');
+            if (!inputField) return;
             
-            inputField.placeholder = "Type Python code...";
-            inputField.classList.remove('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
-            symbol.className = "text-emerald-400 font-bold";
-            symbol.innerText = ">>>";
+            const val = inputField.value;
+            if (pendingInputResolver) {
+                pendingInputResolver(val);
+                pendingInputResolver = null;
+            } else if (val.trim() && pyodide) {
+                appendConsole(`>>> ${val}`, 'input');
+                pyodide.runPythonAsync(val)
+                    .then(res => {
+                        if (res !== undefined) appendConsole(String(res), 'stdout');
+                    })
+                    .catch(err => appendConsole(err.message, 'error'));
+                inputField.value = '';
+            }
+        }
+
+        async function ensurePyodideScriptLoaded() {
+            let retries = 0;
+            while (typeof loadPyodide === 'undefined') {
+                retries++;
+                if (retries > 60) {
+                    throw new Error("Pyodide script failed to load from CDN.");
+                }
+                await new Promise(r => setTimeout(r, 200));
+            }
         }
 
         async function initPyodideEngine() {
@@ -471,26 +545,27 @@ print("Files in workspace:", os.listdir("."))
             const runBtn = document.getElementById('run-btn');
 
             try {
-                statusText.innerText = "Loading WASM...";
-                
+                statusText.innerText = "Loading Pyodide WASM...";
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer";
+                statusDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+
+                await ensurePyodideScriptLoaded();
+
+                statusText.innerText = "Initializing Engine...";
+
                 pyodide = await loadPyodide({
                     indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.1/full/",
                     stdout: (text) => appendConsole(text, 'stdout'),
                     stderr: (text) => appendConsole(text, 'stderr'),
                     stdin: () => {
-                        try {
-                            const res = window.prompt("Input requested by Python script:");
-                            return res !== null ? res + "\n" : "";
-                        } catch (e) {
-                            return "";
-                        }
+                        const res = window.prompt("Input requested by Python script:");
+                        return res !== null ? res + "\n" : "";
                     }
                 });
 
-                // Override Matplotlib & Input Hooks in Pyodide Python scope
+                // Override Matplotlib & Input Hooks in Pyodide
                 await pyodide.runPythonAsync(`
-import sys, io, base64, builtins, ast, js, inspect
-import pyodide, pyodide.code
+import sys, io, base64, builtins, ast, js
 
 def _setup_matplotlib_hook():
     try:
@@ -505,8 +580,8 @@ def _setup_matplotlib_hook():
             img_b64 = base64.b64encode(buf.read()).decode('utf-8')
             plt.close('all')
             
-            import js
-            js.renderPlotImage(img_b64)
+            if hasattr(js, 'renderPlotImage'):
+                js.renderPlotImage(img_b64)
             
         plt.show = custom_show
     except Exception:
@@ -550,187 +625,108 @@ def _transform_and_run(user_code):
             transformer = AsyncInputTransformer()
             transformed = transformer.visit(parsed)
             ast.fix_missing_locations(transformed)
-            return transformed, True
+            return ast.unparse(transformed)
     except Exception:
         pass
-    return user_code, False
+    return user_code
 
 _setup_matplotlib_hook()
 `);
 
-                // Pre-load micropip for dynamic library installation
+                // Pre-load micropip for dynamic package installation
+                statusText.innerText = "Loading Micropip...";
                 await pyodide.loadPackage("micropip");
 
-                // Ready state
-                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs";
+                // Engine ready
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs cursor-pointer";
                 statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
                 statusText.innerText = "Python WASM Ready";
                 runBtn.disabled = false;
 
-                appendConsole("✅ Pyodide Python engine initialized.", "system");
+                appendConsole("✅ Pyodide Python 3.11 WASM Engine Ready.", "system");
                 refreshVirtualFS();
 
             } catch (err) {
-                console.error("Pyodide error:", err);
-                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs";
+                console.error("Pyodide initialization error:", err);
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs cursor-pointer";
                 statusDot.className = "w-2 h-2 rounded-full bg-red-400";
-                statusText.innerText = "Failed to load WASM";
+                statusText.innerText = "Failed (Click to retry)";
                 appendConsole(`❌ Engine initialization failed: ${err.message}`, "error");
             }
         }
 
-        function appendConsole(text, type = 'stdout') {
-            const consoleOutput = document.getElementById('console-output');
-            const line = document.createElement('div');
-            line.className = 'terminal-line font-mono text-xs py-0.5';
-
-            if (type === 'stdout') line.className += ' text-slate-200';
-            else if (type === 'stderr' || type === 'error') line.className += ' text-red-400 font-semibold';
-            else if (type === 'system') line.className += ' text-blue-400 italic';
-            else if (type === 'input') line.className += ' text-amber-300 font-bold';
-            else if (type === 'result') line.className += ' text-emerald-400 font-semibold';
-
-            line.textContent = text;
-            consoleOutput.appendChild(line);
-            consoleOutput.scrollTop = consoleOutput.scrollHeight;
-        }
-
-        function clearConsole() {
-            if (pendingInputResolver) {
-                pendingInputResolver("");
+        window.retryPyodideInit = function() {
+            if (!pyodide) {
+                initPyodideEngine();
             }
-            const consoleOutput = document.getElementById('console-output');
-            if (consoleOutput) {
-                consoleOutput.innerHTML = '';
-            }
-        }
+        };
 
         async function runPythonScript() {
-            if (isExecuting || !pyodide) return;
+            if (!pyodide || isExecuting) return;
 
-            const code = aceEditor.getValue();
-            if (!code.trim()) return;
-
-            // Automatically clear console output on script execution
-            clearConsole();
-
-            isExecuting = true;
-            updateRunButtonState(true);
-
-            try {
-                // Auto load standard imports if required
-                try {
-                    await pyodide.loadPackagesFromImports(code, {
-                        messageCallback: (msg) => appendConsole(`📦 ${msg}`, "system")
-                    });
-                } catch (pkgErr) {
-                    appendConsole(`📦 Notice: Checking packages via micropip (${pkgErr.message})...`, "system");
-                }
-
-                // Re-apply matplotlib hook
-                await pyodide.runPythonAsync(`_setup_matplotlib_hook()`);
-
-                // Execute Python code safely through input transformer
-                pyodide.globals.set("__user_code__", code);
-                let result = await pyodide.runPythonAsync(`
-import ast, inspect, pyodide, pyodide.code
-transformed, is_transformed = _transform_and_run(__user_code__)
-if is_transformed:
-    flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
-    compiled = compile(transformed, filename="<string>", mode="exec", flags=flags)
-    exec_res = eval(compiled, globals())
-    if inspect.iscoroutine(exec_res):
-        await exec_res
-else:
-    await pyodide.code.eval_code_async(__user_code__, globals())
-`);
-
-                if (result !== undefined && result !== null) {
-                    appendConsole(String(result), 'result');
-                }
-
-                refreshVirtualFS();
-
-            } catch (err) {
-                appendConsole(`Traceback (most recent call last):\n${err.message}`, "error");
-            } finally {
-                if (pendingInputResolver) {
-                    pendingInputResolver("");
-                }
-                isExecuting = false;
-                updateRunButtonState(false);
-            }
-        }
-
-        function updateRunButtonState(running) {
             const runBtn = document.getElementById('run-btn');
             const runIcon = document.getElementById('run-icon');
             const runText = document.getElementById('run-text');
 
-            if (running) {
-                runBtn.disabled = true;
-                runBtn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-md bg-dark-700 text-slate-400 cursor-wait flex items-center gap-1.5";
-                runIcon.className = "fa-solid fa-spinner animate-spin text-blue-400 text-[10px]";
-                runText.innerText = "Running...";
-            } else {
+            const code = aceEditor ? aceEditor.getValue() : '';
+            if (!code.trim()) return;
+
+            // Auto-clear console on start of every script execution
+            clearConsole();
+
+            isExecuting = true;
+            runBtn.disabled = true;
+            runIcon.className = "fa-solid fa-spinner animate-spin text-[10px]";
+            runText.innerText = "Running...";
+
+            try {
+                // Auto-load missing packages imported in code
+                appendConsole("🔍 Checking script dependencies...", "system");
+                await pyodide.loadPackagesFromImports(code);
+
+                // Transform AST for interactive input if needed
+                const transformedCode = pyodide.runPython(`_transform_and_run(${JSON.stringify(code)})`);
+
+                // Run script asynchronously
+                await pyodide.runPythonAsync(transformedCode);
+                appendConsole("\n--- Execution completed successfully ---", "system");
+
+            } catch (err) {
+                appendConsole(`\nTraceback (most recent call last):\n${err.message}`, "error");
+            } finally {
+                isExecuting = false;
                 runBtn.disabled = false;
-                runBtn.className = "px-3.5 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition active:scale-95 shadow-sm";
                 runIcon.className = "fa-solid fa-play text-[10px]";
                 runText.innerText = "Run Script";
+                refreshVirtualFS();
             }
         }
 
-        window.installPackage = async function(pkgName) {
-            if (!pyodide || !pkgName) return;
-            switchTab('console');
-            appendConsole(`📦 Installing '${pkgName}'...`, 'system');
-            try {
-                const micropip = pyodide.pyimport('micropip');
-                await micropip.install(pkgName);
-                appendConsole(`✅ Package '${pkgName}' installed successfully! You can now import it in your script.`, 'system');
-            } catch (err) {
-                appendConsole(`❌ Failed to install '${pkgName}': ${err.message}`, 'error');
-            }
+        window.renderPlotImage = function(base64Data) {
+            const plotContainer = document.getElementById('plot-container');
+            const plotPlaceholder = document.getElementById('plot-placeholder');
+            const plotBadge = document.getElementById('plot-badge');
+            
+            if (!plotContainer) return;
+            
+            plotPlaceholder.classList.add('hidden');
+            plotContainer.classList.remove('hidden');
+            
+            const img = document.createElement('img');
+            img.src = 'data:image/png;base64,' + base64Data;
+            img.className = 'max-w-full h-auto rounded border border-dark-border shadow-lg';
+            
+            plotContainer.appendChild(img);
+            if (plotBadge) plotBadge.classList.remove('hidden');
+            
+            switchTab('plots');
         };
 
-        async function handleInteractiveInput() {
-            const inputField = document.getElementById('interactive-input');
-            const val = inputField.value;
-            inputField.value = '';
-
-            // Handle pending Python input() request
-            if (pendingInputResolver) {
-                const resolve = pendingInputResolver;
-                resolve(val);
-                return;
-            }
-
-            // Standard REPL Execution
-            const trimmed = val.trim();
-            if (!trimmed || !pyodide) return;
-
-            // Support pip install command directly in console
-            if (trimmed.startsWith('pip install ')) {
-                const pkg = trimmed.replace('pip install ', '').trim();
-                await installPackage(pkg);
-                return;
-            }
-
-            appendConsole(`>>> ${trimmed}`, 'input');
-
-            try {
-                let res = await pyodide.runPythonAsync(trimmed);
-                if (res !== undefined) appendConsole(String(res), 'result');
-            } catch (err) {
-                appendConsole(err.message, 'error');
-            }
-        }
-
-        async function refreshVirtualFS() {
-            if (!pyodide) return;
+        function refreshVirtualFS() {
             const fsTree = document.getElementById('fs-tree');
-            fsTree.innerHTML = '';
+            if (!fsTree || !pyodide) return;
 
+            fsTree.innerHTML = '';
             try {
                 const files = pyodide.FS.readdir('/home/pyodide');
                 for (const f of files) {
@@ -774,6 +770,19 @@ else:
                 refreshVirtualFS();
             } catch (err) {
                 appendConsole(`Delete failed: ${err.message}`, 'error');
+            }
+        };
+
+        window.installPackage = async function(pkgName) {
+            if (!pyodide) return;
+            switchTab('console');
+            appendConsole(`📦 Installing package: ${pkgName}...`, 'system');
+            try {
+                const micropip = pyodide.pyimport("micropip");
+                await micropip.install(pkgName);
+                appendConsole(`✅ Package '${pkgName}' installed successfully!`, 'system');
+            } catch (err) {
+                appendConsole(`❌ Failed to install '${pkgName}': ${err.message}`, 'error');
             }
         };
 
@@ -872,3 +881,6 @@ else:
                 }
             });
         });
+    </script>
+</body>
+</html>
