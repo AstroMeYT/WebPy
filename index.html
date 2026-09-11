@@ -37,9 +37,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-one_dark.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ext-language_tools.min.js"></script>
 
-    <!-- Pyodide Python WASM Engine -->
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
@@ -98,13 +95,14 @@
 </head>
 <body class="h-screen w-screen flex flex-col bg-dark-900 text-slate-200 antialiased">
 
+    <!-- Header Toolbar -->
     <header class="h-12 border-b border-dark-border bg-dark-800/90 px-4 flex items-center justify-between z-20 shrink-0">
         <div class="flex items-center space-x-3">
             <div class="flex items-center justify-center w-7 h-7 rounded-md bg-blue-600 text-white font-bold text-sm shadow">
                 <i class="fa-brands fa-python"></i>
             </div>
             <span class="font-bold text-slate-100 tracking-wide text-sm flex items-center gap-2">
-                PyWASM Studio
+                PyWASM Studio <span class="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-normal">Worker Mode</span>
             </span>
         </div>
 
@@ -114,10 +112,10 @@
             <select id="template-select" class="bg-dark-700 hover:bg-dark-600 text-slate-300 text-xs rounded-md px-2.5 py-1.5 border border-dark-border focus:outline-none focus:border-blue-500 cursor-pointer transition">
                 <option value="" disabled selected>⚡ Load Sample</option>
                 <option value="hello">1. Hello World</option>
-                <option value="math">2. Math & Algorithms</option>
-                <option value="input">3. Interactive Input (input())</option>
-                <option value="plot">4. Matplotlib Visualization</option>
-                <option value="async">5. Async Task Execution</option>
+                <option value="loop">2. Infinite Loop Test (Non-Blocking)</option>
+                <option value="math">3. Math & Algorithms</option>
+                <option value="input">4. Interactive Input (input())</option>
+                <option value="plot">5. Matplotlib Visualization</option>
                 <option value="files">6. File System Input/Output</option>
             </select>
 
@@ -133,17 +131,24 @@
                 <i id="run-icon" class="fa-solid fa-play text-[10px]"></i>
                 <span id="run-text">Run Script</span>
             </button>
+
+            <!-- Stop Button (Active when running) -->
+            <button id="stop-btn" class="hidden px-3.5 py-1.5 text-xs font-semibold rounded-md bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition active:scale-95 shadow-sm">
+                <i class="fa-solid fa-stop text-[10px]"></i>
+                <span>Stop Execution</span>
+            </button>
         </div>
 
         <!-- Status Indicator -->
         <div class="flex items-center">
-            <div id="status-pill" onclick="retryPyodideInit()" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer transition" title="Click to reload engine if needed">
+            <div id="status-pill" onclick="restartWorker()" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer transition" title="Click to restart Web Worker runtime">
                 <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                <span id="status-text">Booting Python Engine...</span>
+                <span id="status-text">Spawning WASM Worker...</span>
             </div>
         </div>
     </header>
 
+    <!-- Main Workspace Layout -->
     <main class="flex-1 flex overflow-hidden relative">
 
         <!-- Code Editor Panel -->
@@ -185,13 +190,13 @@
                 <!-- Terminal Console -->
                 <div id="content-console" class="absolute inset-0 flex flex-col p-3 code-font text-xs overflow-y-auto">
                     <div id="console-output" class="flex-1 space-y-1 font-mono">
-                        <div class="text-slate-500 italic mb-2">System initialized. Script results will appear below.</div>
+                        <div class="text-slate-500 italic mb-2">System initialized. Worker outputs will stream here.</div>
                     </div>
 
                     <!-- Interactive Command & Prompt Input -->
                     <div id="input-container" class="mt-2 pt-2 border-t border-dark-border flex items-center gap-2 transition-all duration-200">
                         <span id="input-prompt-symbol" class="text-emerald-400 font-bold">&gt;&gt;&gt;</span>
-                        <input id="interactive-input" type="text" placeholder="Type Python code or input response..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
+                        <input id="interactive-input" type="text" placeholder="Type Python response or command..." class="flex-1 bg-dark-800 text-slate-200 px-2.5 py-1 rounded border border-dark-border focus:outline-none focus:border-blue-500 code-font text-xs transition">
                         <button id="send-input-btn" class="px-2.5 py-1 bg-dark-700 hover:bg-dark-600 border border-dark-border rounded text-slate-300 text-xs font-medium transition">
                             <i id="send-icon" class="fa-solid fa-paper-plane"></i>
                         </button>
@@ -211,7 +216,7 @@
                 <!-- Virtual File Explorer -->
                 <div id="content-fs" class="absolute inset-0 hidden flex flex-col p-3 text-xs">
                     <div class="flex items-center justify-between pb-2 mb-2 border-b border-dark-border">
-                        <span class="font-medium text-slate-300">Pyodide Virtual FS (/home/pyodide)</span>
+                        <span class="font-medium text-slate-300">Pyodide Worker Virtual FS (/home/pyodide)</span>
                         <button id="refresh-fs-btn" class="text-slate-400 hover:text-slate-200 transition" title="Refresh files">
                             <i class="fa-solid fa-arrows-rotate"></i>
                         </button>
@@ -227,7 +232,7 @@
                 <div id="content-packages" class="absolute inset-0 hidden flex flex-col p-3 text-xs space-y-3">
                     <div class="border-b border-dark-border pb-2">
                         <div class="font-medium text-slate-300 mb-1">Package Manager (micropip)</div>
-                        <p class="text-[11px] text-slate-500">Install Python packages dynamically from PyPI or WebAssembly wheels.</p>
+                        <p class="text-[11px] text-slate-500">Install Python packages dynamically in background worker.</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <input id="pkg-name-input" type="text" placeholder="Package name (e.g. sympy, requests)" class="flex-1 bg-dark-800 border border-dark-border px-2.5 py-1.5 rounded text-slate-200 text-xs focus:outline-none focus:border-blue-500 code-font">
@@ -244,7 +249,6 @@
                             <button onclick="installPackage('scipy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">scipy</button>
                             <button onclick="installPackage('sympy')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">sympy</button>
                             <button onclick="installPackage('requests')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">requests</button>
-                            <button onclick="installPackage('beautifulsoup4')" class="px-2 py-1 bg-dark-800 hover:bg-dark-700 border border-dark-border rounded text-slate-300 text-[11px] transition">beautifulsoup4</button>
                         </div>
                     </div>
                 </div>
@@ -254,20 +258,209 @@
 
     </main>
 
+    <!-- Web Worker Logic and Client Integration -->
     <script>
-        let pyodide = null;
+        // Web Worker Script Content (Embedded for Single-File Standalone Execution)
+        const WORKER_SCRIPT = `
+            importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
+
+            let pyodide = null;
+            let pendingInputResolver = null;
+
+            async function initPyodideWorker() {
+                try {
+                    self.postMessage({ type: 'status', status: 'loading', text: 'Loading WASM Engine...' });
+
+                    pyodide = await loadPyodide({
+                        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.1/full/",
+                        stdout: (text) => self.postMessage({ type: 'stdout', text }),
+                        stderr: (text) => self.postMessage({ type: 'stderr', text })
+                    });
+
+                    // Configure Matplotlib & custom Input hooks in worker
+                    await pyodide.runPythonAsync(\`
+import sys, io, base64, builtins, ast, js
+
+def _setup_matplotlib_hook():
+    try:
+        import matplotlib
+        matplotlib.use('agg')
+        import matplotlib.pyplot as plt
+        
+        def custom_show(*args, **kwargs):
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+            buf.seek(0)
+            img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+            plt.close('all')
+            js.sendPlotToMain(img_b64)
+            
+        plt.show = custom_show
+    except Exception:
+        pass
+
+async def _custom_input(prompt=""):
+    p_str = str(prompt) if prompt is not None else ""
+    val = await js.requestInputFromMain(p_str)
+    return str(val)
+
+builtins.input = _custom_input
+
+class AsyncInputTransformer(ast.NodeTransformer):
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        if isinstance(node.func, ast.Name) and node.func.id == 'input':
+            return ast.Await(value=node)
+        return node
+
+    def visit_FunctionDef(self, node):
+        self.generic_visit(node)
+        has_await = any(isinstance(child, ast.Await) for child in ast.walk(node))
+        if has_await:
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=node.body,
+                decorator_list=node.decorator_list,
+                returns=node.returns
+            )
+        return node
+
+def _transform_and_run(user_code):
+    try:
+        parsed = ast.parse(user_code)
+        has_input = any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'input'
+            for node in ast.walk(parsed)
+        )
+        if has_input:
+            transformer = AsyncInputTransformer()
+            transformed = transformer.visit(parsed)
+            ast.fix_missing_locations(transformed)
+            return ast.unparse(transformed)
+    except Exception:
+        pass
+    return user_code
+
+_setup_matplotlib_hook()
+\`);
+
+                    // Define Javascript callbacks exposed to Pyodide in worker scope
+                    self.sendPlotToMain = (b64) => {
+                        self.postMessage({ type: 'plot', base64: b64 });
+                    };
+
+                    self.requestInputFromMain = (promptText) => {
+                        return new Promise((resolve) => {
+                            pendingInputResolver = resolve;
+                            self.postMessage({ type: 'input_request', prompt: promptText });
+                        });
+                    };
+
+                    await pyodide.loadPackage("micropip");
+                    self.postMessage({ type: 'status', status: 'ready', text: 'Python WASM Ready (Worker)' });
+                    sendFSList();
+
+                } catch (err) {
+                    self.postMessage({ type: 'status', status: 'error', text: 'Worker Init Error: ' + err.message });
+                }
+            }
+
+            self.onmessage = async function(e) {
+                const msg = e.data;
+                if (!msg) return;
+
+                if (msg.type === 'init') {
+                    await initPyodideWorker();
+                } else if (msg.type === 'run') {
+                    if (!pyodide) return;
+                    try {
+                        self.postMessage({ type: 'status', status: 'running', text: 'Executing...' });
+                        
+                        // Check & install dependencies
+                        self.postMessage({ type: 'stdout_system', text: '🔍 Checking script dependencies...' });
+                        await pyodide.loadPackagesFromImports(msg.code);
+
+                        const transformedCode = pyodide.runPython(\`_transform_and_run(\${JSON.stringify(msg.code)})\`);
+                        const res = await pyodide.runPythonAsync(transformedCode);
+
+                        self.postMessage({ type: 'complete', success: true, result: res !== undefined ? String(res) : null });
+                        self.postMessage({ type: 'status', status: 'ready', text: 'Python WASM Ready (Worker)' });
+                    } catch (err) {
+                        self.postMessage({ type: 'complete', success: false, error: err.message });
+                        self.postMessage({ type: 'status', status: 'ready', text: 'Python WASM Ready (Worker)' });
+                    }
+                    sendFSList();
+                } else if (msg.type === 'input_response') {
+                    if (pendingInputResolver) {
+                        pendingInputResolver(msg.value);
+                        pendingInputResolver = null;
+                    }
+                } else if (msg.type === 'install_package') {
+                    if (!pyodide) return;
+                    try {
+                        self.postMessage({ type: 'stdout_system', text: \`📦 Installing package: \${msg.pkgName}...\` });
+                        const micropip = pyodide.pyimport("micropip");
+                        await micropip.install(msg.pkgName);
+                        self.postMessage({ type: 'stdout_system', text: \`✅ Package '\${msg.pkgName}' installed successfully!\` });
+                    } catch (err) {
+                        self.postMessage({ type: 'stderr', text: \`❌ Failed to install '\${msg.pkgName}': \${err.message}\` });
+                    }
+                } else if (msg.type === 'fs_refresh') {
+                    sendFSList();
+                } else if (msg.type === 'fs_read') {
+                    try {
+                        const content = pyodide.FS.readFile(\`/home/pyodide/\${msg.filename}\`, { encoding: 'utf8' });
+                        self.postMessage({ type: 'fs_read_res', filename: msg.filename, content });
+                    } catch (err) {
+                        self.postMessage({ type: 'stderr', text: \`File read failed: \${err.message}\` });
+                    }
+                } else if (msg.type === 'fs_delete') {
+                    try {
+                        pyodide.FS.unlink(\`/home/pyodide/\${msg.filename}\`);
+                        sendFSList();
+                    } catch (err) {
+                        self.postMessage({ type: 'stderr', text: \`Delete failed: \${err.message}\` });
+                    }
+                } else if (msg.type === 'fs_create') {
+                    try {
+                        pyodide.FS.writeFile(\`/home/pyodide/\${msg.filename}\`, '# New file\\n');
+                        sendFSList();
+                    } catch (err) {
+                        self.postMessage({ type: 'stderr', text: \`Create file failed: \${err.message}\` });
+                    }
+                }
+            };
+
+            function sendFSList() {
+                if (!pyodide) return;
+                try {
+                    const files = pyodide.FS.readdir('/home/pyodide');
+                    const list = [];
+                    for (const f of files) {
+                        if (f === '.' || f === '..') continue;
+                        const stat = pyodide.FS.stat(\`/home/pyodide/\${f}\`);
+                        list.push({ name: f, isDir: pyodide.FS.isDir(stat.mode) });
+                    }
+                    self.postMessage({ type: 'fs_list_res', files: list });
+                } catch (err) {
+                    console.error("FS Error:", err);
+                }
+            }
+        `;
+
+        // Main Thread State & Code Presets
+        let pyWorker = null;
         let aceEditor = null;
         let isExecuting = false;
         let pendingInputResolver = null;
-        let activeInlineInput = null;
 
-        // Code Presets
         const CODE_PRESETS = {
             hello: `# Python WASM Studio
 import sys
 import platform
 
-print("🐍 Welcome to PyWASM Studio!")
+print("🐍 Welcome to PyWASM Studio (Web Worker Mode)!")
 print(f"Python Version: {sys.version.split()[0]}")
 print(f"Platform: {platform.platform()}")
 print("----------------------------------------")
@@ -281,6 +474,25 @@ def fibonacci(n):
     return res
 
 print(f"Fibonacci(10): {fibonacci(10)}")
+`,
+            loop: `# Infinite Loop Test
+# Runs safely inside background Web Worker!
+# The UI remains 100% responsive. Use 'Stop Execution' anytime.
+
+import time
+
+a = 1
+b = 0
+count = 0
+
+print("Starting background loop...")
+while True:
+    a = a + b
+    b = b + a
+    count += 1
+    if count % 100000 == 0:
+        print(f"Iteration {count}: a={a % 1000000}")
+        time.sleep(0.2)
 `,
             math: `# Math & Prime Calculations
 import math
@@ -341,31 +553,13 @@ plt.legend(facecolor='#12141d', edgecolor='#262a38', labelcolor='#e2e8f0')
 plt.show()
 print("Plot generated in Graphics tab!")
 `,
-            async: `# Async Execution
-import asyncio
-
-async def fetch_task(name, delay):
-    print(f"Starting Task {name}...")
-    await asyncio.sleep(delay)
-    print(f"--> Task {name} complete!")
-
-async def main():
-    print("Initiating async pipeline...")
-    await asyncio.gather(
-        fetch_task("A", 0.5),
-        fetch_task("B", 0.8)
-    )
-    print("All tasks finished successfully.")
-
-asyncio.run(main())
-`,
             files: `# Virtual File System
 import os
 
 filename = "sample.txt"
 with open(filename, "w") as f:
     f.write("Line 1: PyWASM Studio Virtual File\\n")
-    f.write("Line 2: Running completely client-side in WASM\\n")
+    f.write("Line 2: Running completely inside Web Worker\\n")
 
 print(f"Created file: {filename}")
 with open(filename, "r") as f:
@@ -375,6 +569,7 @@ print("Files in workspace:", os.listdir("."))
 `
         };
 
+        // Initialize Ace Code Editor
         function initEditor() {
             try {
                 if (typeof ace === 'undefined') return;
@@ -396,11 +591,100 @@ print("Files in workspace:", os.listdir("."))
                     name: 'runScript',
                     bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
                     exec: function() {
-                        if (!isExecuting && pyodide) runPythonScript();
+                        if (!isExecuting && pyWorker) runPythonScript();
                     }
                 });
             } catch (err) {
-                console.warn("Ace editor init warning:", err);
+                console.warn("Editor init:", err);
+            }
+        }
+
+        // Initialize Pyodide Web Worker
+        function initPyodideWorker() {
+            if (pyWorker) {
+                pyWorker.terminate();
+            }
+
+            const blob = new Blob([WORKER_SCRIPT], { type: 'application/javascript' });
+            const workerUrl = URL.createObjectURL(blob);
+            pyWorker = new Worker(workerUrl);
+
+            updateWorkerStatus('loading', 'Spawning WASM Worker...');
+
+            pyWorker.onmessage = function(e) {
+                const msg = e.data;
+                if (!msg) return;
+
+                if (msg.type === 'status') {
+                    updateWorkerStatus(msg.status, msg.text);
+                } else if (msg.type === 'stdout') {
+                    appendConsole(msg.text, 'stdout');
+                } else if (msg.type === 'stderr') {
+                    appendConsole(msg.text, 'stderr');
+                } else if (msg.type === 'stdout_system') {
+                    appendConsole(msg.text, 'system');
+                } else if (msg.type === 'plot') {
+                    renderPlotImage(msg.base64);
+                } else if (msg.type === 'input_request') {
+                    handleWorkerInputRequest(msg.prompt);
+                } else if (msg.type === 'complete') {
+                    onExecutionComplete(msg);
+                } else if (msg.type === 'fs_list_res') {
+                    renderFSList(msg.files);
+                } else if (msg.type === 'fs_read_res') {
+                    if (aceEditor) aceEditor.setValue(msg.content, -1);
+                }
+            };
+
+            pyWorker.onerror = function(err) {
+                appendConsole(`Worker Error: ${err.message}`, 'error');
+                updateWorkerStatus('error', 'Worker crashed (Click to restart)');
+            };
+
+            pyWorker.postMessage({ type: 'init' });
+        }
+
+        function restartWorker() {
+            appendConsole("🔄 Restarting Python WASM Worker...", "system");
+            initPyodideWorker();
+        }
+
+        function updateWorkerStatus(status, text) {
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            const statusPill = document.getElementById('status-pill');
+            const runBtn = document.getElementById('run-btn');
+            const stopBtn = document.getElementById('stop-btn');
+
+            if (statusText) statusText.innerText = text;
+
+            if (status === 'loading') {
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer";
+                statusDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+                runBtn.disabled = true;
+                stopBtn.classList.add('hidden');
+                runBtn.classList.remove('hidden');
+            } else if (status === 'ready') {
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs cursor-pointer";
+                statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                runBtn.disabled = false;
+                isExecuting = false;
+                stopBtn.classList.add('hidden');
+                runBtn.classList.remove('hidden');
+                document.getElementById('run-icon').className = "fa-solid fa-play text-[10px]";
+                document.getElementById('run-text').innerText = "Run Script";
+            } else if (status === 'running') {
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs cursor-pointer";
+                statusDot.className = "w-2 h-2 rounded-full bg-blue-400 animate-pulse";
+                runBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
+            } else if (status === 'error') {
+                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs cursor-pointer";
+                statusDot.className = "w-2 h-2 rounded-full bg-red-400";
+                runBtn.disabled = false;
+                isExecuting = false;
+                stopBtn.classList.add('hidden');
+                runBtn.classList.remove('hidden');
             }
         }
 
@@ -440,17 +724,17 @@ print("Files in workspace:", os.listdir("."))
             
             if (inputField) {
                 inputField.value = '';
-                inputField.placeholder = "Type Python code or input response...";
+                inputField.placeholder = "Type Python response or command...";
                 inputField.classList.remove('border-amber-500', 'bg-amber-950/20', 'ring-1', 'ring-amber-500');
             }
             if (symbol) {
                 symbol.className = "text-emerald-400 font-bold";
                 symbol.innerText = ">>>";
             }
-            activeInlineInput = null;
+            pendingInputResolver = null;
         }
 
-        window.requestConsoleInput = function(promptText) {
+        function handleWorkerInputRequest(promptText) {
             switchTab('console');
             const consoleOutput = document.getElementById('console-output');
             
@@ -470,9 +754,7 @@ print("Files in workspace:", os.listdir("."))
             consoleOutput.scrollTop = consoleOutput.scrollHeight;
 
             inlineInput.focus();
-            activeInlineInput = inlineInput;
 
-            // Highlight bottom input bar as well
             const bottomInput = document.getElementById('interactive-input');
             const symbol = document.getElementById('input-prompt-symbol');
             if (bottomInput) {
@@ -484,29 +766,31 @@ print("Files in workspace:", os.listdir("."))
                 symbol.innerText = "INP>";
             }
 
-            return new Promise((resolve) => {
-                const submitVal = (val) => {
-                    const finalVal = val !== undefined ? val : inlineInput.value;
+            const submitVal = (val) => {
+                const finalVal = val !== undefined ? val : inlineInput.value;
+                if (promptLine.contains(inlineInput)) {
                     promptLine.removeChild(inlineInput);
-                    const valSpan = document.createElement('span');
-                    valSpan.className = 'text-emerald-400 font-semibold ml-1';
-                    valSpan.textContent = finalVal;
-                    promptLine.appendChild(valSpan);
-                    
-                    resetInputMode();
-                    resolve(finalVal);
-                };
+                }
+                const valSpan = document.createElement('span');
+                valSpan.className = 'text-emerald-400 font-semibold ml-1';
+                valSpan.textContent = finalVal;
+                promptLine.appendChild(valSpan);
+                
+                resetInputMode();
+                if (pyWorker) {
+                    pyWorker.postMessage({ type: 'input_response', value: finalVal });
+                }
+            };
 
-                pendingInputResolver = submitVal;
+            pendingInputResolver = submitVal;
 
-                inlineInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        submitVal(inlineInput.value);
-                    }
-                });
+            inlineInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitVal(inlineInput.value);
+                }
             });
-        };
+        }
 
         function handleInteractiveInput() {
             const inputField = document.getElementById('interactive-input');
@@ -515,194 +799,45 @@ print("Files in workspace:", os.listdir("."))
             const val = inputField.value;
             if (pendingInputResolver) {
                 pendingInputResolver(val);
-                pendingInputResolver = null;
-            } else if (val.trim() && pyodide) {
+            } else if (val.trim() && pyWorker && !isExecuting) {
                 appendConsole(`>>> ${val}`, 'input');
-                pyodide.runPythonAsync(val)
-                    .then(res => {
-                        if (res !== undefined) appendConsole(String(res), 'stdout');
-                    })
-                    .catch(err => appendConsole(err.message, 'error'));
+                pyWorker.postMessage({ type: 'run', code: val });
                 inputField.value = '';
             }
         }
 
-        async function ensurePyodideScriptLoaded() {
-            let retries = 0;
-            while (typeof loadPyodide === 'undefined') {
-                retries++;
-                if (retries > 60) {
-                    throw new Error("Pyodide script failed to load from CDN.");
-                }
-                await new Promise(r => setTimeout(r, 200));
-            }
-        }
-
-        async function initPyodideEngine() {
-            const statusText = document.getElementById('status-text');
-            const statusDot = document.getElementById('status-dot');
-            const statusPill = document.getElementById('status-pill');
-            const runBtn = document.getElementById('run-btn');
-
-            try {
-                statusText.innerText = "Loading Pyodide WASM...";
-                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs cursor-pointer";
-                statusDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
-
-                await ensurePyodideScriptLoaded();
-
-                statusText.innerText = "Initializing Engine...";
-
-                pyodide = await loadPyodide({
-                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.1/full/",
-                    stdout: (text) => appendConsole(text, 'stdout'),
-                    stderr: (text) => appendConsole(text, 'stderr'),
-                    stdin: () => {
-                        const res = window.prompt("Input requested by Python script:");
-                        return res !== null ? res + "\n" : "";
-                    }
-                });
-
-                // Override Matplotlib & Input Hooks in Pyodide
-                await pyodide.runPythonAsync(`
-import sys, io, base64, builtins, ast, js
-
-def _setup_matplotlib_hook():
-    try:
-        import matplotlib
-        matplotlib.use('agg')
-        import matplotlib.pyplot as plt
-        
-        def custom_show(*args, **kwargs):
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
-            buf.seek(0)
-            img_b64 = base64.b64encode(buf.read()).decode('utf-8')
-            plt.close('all')
-            
-            if hasattr(js, 'renderPlotImage'):
-                js.renderPlotImage(img_b64)
-            
-        plt.show = custom_show
-    except Exception:
-        pass
-
-async def _custom_input(prompt=""):
-    p_str = str(prompt) if prompt is not None else ""
-    val = await js.requestConsoleInput(p_str)
-    return str(val)
-
-builtins.input = _custom_input
-
-class AsyncInputTransformer(ast.NodeTransformer):
-    def visit_Call(self, node):
-        self.generic_visit(node)
-        if isinstance(node.func, ast.Name) and node.func.id == 'input':
-            return ast.Await(value=node)
-        return node
-
-    def visit_FunctionDef(self, node):
-        self.generic_visit(node)
-        has_await = any(isinstance(child, ast.Await) for child in ast.walk(node))
-        if has_await:
-            return ast.AsyncFunctionDef(
-                name=node.name,
-                args=node.args,
-                body=node.body,
-                decorator_list=node.decorator_list,
-                returns=node.returns
-            )
-        return node
-
-def _transform_and_run(user_code):
-    try:
-        parsed = ast.parse(user_code)
-        has_input = any(
-            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'input'
-            for node in ast.walk(parsed)
-        )
-        if has_input:
-            transformer = AsyncInputTransformer()
-            transformed = transformer.visit(parsed)
-            ast.fix_missing_locations(transformed)
-            return ast.unparse(transformed)
-    except Exception:
-        pass
-    return user_code
-
-_setup_matplotlib_hook()
-`);
-
-                // Pre-load micropip for dynamic package installation
-                statusText.innerText = "Loading Micropip...";
-                await pyodide.loadPackage("micropip");
-
-                // Engine ready
-                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs cursor-pointer";
-                statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
-                statusText.innerText = "Python WASM Ready";
-                runBtn.disabled = false;
-
-                appendConsole("✅ Pyodide Python 3.11 WASM Engine Ready.", "system");
-                refreshVirtualFS();
-
-            } catch (err) {
-                console.error("Pyodide initialization error:", err);
-                statusPill.className = "flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs cursor-pointer";
-                statusDot.className = "w-2 h-2 rounded-full bg-red-400";
-                statusText.innerText = "Failed (Click to retry)";
-                appendConsole(`❌ Engine initialization failed: ${err.message}`, "error");
-            }
-        }
-
-        window.retryPyodideInit = function() {
-            if (!pyodide) {
-                initPyodideEngine();
-            }
-        };
-
-        async function runPythonScript() {
-            if (!pyodide || isExecuting) return;
-
-            const runBtn = document.getElementById('run-btn');
-            const runIcon = document.getElementById('run-icon');
-            const runText = document.getElementById('run-text');
+        function runPythonScript() {
+            if (!pyWorker || isExecuting) return;
 
             const code = aceEditor ? aceEditor.getValue() : '';
             if (!code.trim()) return;
 
-            // Auto-clear console on start of every script execution
+            // Auto-clear console on script start
             clearConsole();
 
             isExecuting = true;
-            runBtn.disabled = true;
-            runIcon.className = "fa-solid fa-spinner animate-spin text-[10px]";
-            runText.innerText = "Running...";
+            pyWorker.postMessage({ type: 'run', code });
+        }
 
-            try {
-                // Auto-load missing packages imported in code
-                appendConsole("🔍 Checking script dependencies...", "system");
-                await pyodide.loadPackagesFromImports(code);
+        function stopExecution() {
+            if (!pyWorker) return;
+            appendConsole("🛑 Execution interrupted by user. Re-spawning worker...", "stderr");
+            restartWorker();
+        }
 
-                // Transform AST for interactive input if needed
-                const transformedCode = pyodide.runPython(`_transform_and_run(${JSON.stringify(code)})`);
-
-                // Run script asynchronously
-                await pyodide.runPythonAsync(transformedCode);
+        function onExecutionComplete(msg) {
+            isExecuting = false;
+            if (msg.success) {
+                if (msg.result !== null) {
+                    appendConsole(msg.result, 'stdout');
+                }
                 appendConsole("\n--- Execution completed successfully ---", "system");
-
-            } catch (err) {
-                appendConsole(`\nTraceback (most recent call last):\n${err.message}`, "error");
-            } finally {
-                isExecuting = false;
-                runBtn.disabled = false;
-                runIcon.className = "fa-solid fa-play text-[10px]";
-                runText.innerText = "Run Script";
-                refreshVirtualFS();
+            } else {
+                appendConsole(`\nTraceback (most recent call last):\n${msg.error}`, "error");
             }
         }
 
-        window.renderPlotImage = function(base64Data) {
+        function renderPlotImage(base64Data) {
             const plotContainer = document.getElementById('plot-container');
             const plotPlaceholder = document.getElementById('plot-placeholder');
             const plotBadge = document.getElementById('plot-badge');
@@ -720,70 +855,43 @@ _setup_matplotlib_hook()
             if (plotBadge) plotBadge.classList.remove('hidden');
             
             switchTab('plots');
-        };
+        }
 
-        function refreshVirtualFS() {
+        function renderFSList(files) {
             const fsTree = document.getElementById('fs-tree');
-            if (!fsTree || !pyodide) return;
+            if (!fsTree) return;
 
             fsTree.innerHTML = '';
-            try {
-                const files = pyodide.FS.readdir('/home/pyodide');
-                for (const f of files) {
-                    if (f === '.' || f === '..') continue;
+            for (const item of files) {
+                const row = document.createElement('div');
+                row.className = "flex items-center justify-between p-1.5 rounded hover:bg-dark-800 text-slate-300 group";
 
-                    const stat = pyodide.FS.stat(`/home/pyodide/${f}`);
-                    const isDir = pyodide.FS.isDir(stat.mode);
-
-                    const item = document.createElement('div');
-                    item.className = "flex items-center justify-between p-1.5 rounded hover:bg-dark-800 text-slate-300 group";
-
-                    item.innerHTML = `
-                        <div class="flex items-center space-x-2 truncate">
-                            <i class="${isDir ? 'fa-solid fa-folder text-amber-400' : 'fa-regular fa-file text-blue-400'}"></i>
-                            <span class="truncate">${f}</span>
-                        </div>
-                        <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-1">
-                            ${!isDir ? `<button onclick="readVirtualFile('${f}')" title="View" class="p-1 text-slate-400 hover:text-blue-400"><i class="fa-solid fa-eye"></i></button>` : ''}
-                            <button onclick="deleteVirtualFile('${f}')" title="Delete" class="p-1 text-slate-400 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                    `;
-                    fsTree.appendChild(item);
-                }
-            } catch (err) {
-                console.error("FS Error:", err);
+                row.innerHTML = `
+                    <div class="flex items-center space-x-2 truncate">
+                        <i class="${item.isDir ? 'fa-solid fa-folder text-amber-400' : 'fa-regular fa-file text-blue-400'}"></i>
+                        <span class="truncate">${item.name}</span>
+                    </div>
+                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-1">
+                        ${!item.isDir ? `<button onclick="readVirtualFile('${item.name}')" title="View" class="p-1 text-slate-400 hover:text-blue-400"><i class="fa-solid fa-eye"></i></button>` : ''}
+                        <button onclick="deleteVirtualFile('${item.name}')" title="Delete" class="p-1 text-slate-400 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                fsTree.appendChild(row);
             }
         }
 
-        window.readVirtualFile = function(fileName) {
-            try {
-                const content = pyodide.FS.readFile(`/home/pyodide/${fileName}`, { encoding: 'utf8' });
-                if (aceEditor) aceEditor.setValue(content, -1);
-            } catch (err) {
-                appendConsole(`File read failed: ${err.message}`, 'error');
-            }
+        window.readVirtualFile = function(filename) {
+            if (pyWorker) pyWorker.postMessage({ type: 'fs_read', filename });
         };
 
-        window.deleteVirtualFile = function(fileName) {
-            try {
-                pyodide.FS.unlink(`/home/pyodide/${fileName}`);
-                refreshVirtualFS();
-            } catch (err) {
-                appendConsole(`Delete failed: ${err.message}`, 'error');
-            }
+        window.deleteVirtualFile = function(filename) {
+            if (pyWorker) pyWorker.postMessage({ type: 'fs_delete', filename });
         };
 
-        window.installPackage = async function(pkgName) {
-            if (!pyodide) return;
+        window.installPackage = function(pkgName) {
+            if (!pyWorker) return;
             switchTab('console');
-            appendConsole(`📦 Installing package: ${pkgName}...`, 'system');
-            try {
-                const micropip = pyodide.pyimport("micropip");
-                await micropip.install(pkgName);
-                appendConsole(`✅ Package '${pkgName}' installed successfully!`, 'system');
-            } catch (err) {
-                appendConsole(`❌ Failed to install '${pkgName}': ${err.message}`, 'error');
-            }
+            pyWorker.postMessage({ type: 'install_package', pkgName });
         };
 
         window.switchTab = function(tabName) {
@@ -807,9 +915,10 @@ _setup_matplotlib_hook()
 
         document.addEventListener('DOMContentLoaded', () => {
             initEditor();
-            initPyodideEngine();
+            initPyodideWorker();
 
             document.getElementById('run-btn').addEventListener('click', runPythonScript);
+            document.getElementById('stop-btn').addEventListener('click', stopExecution);
 
             document.getElementById('template-select').addEventListener('change', (e) => {
                 const key = e.target.value;
@@ -841,20 +950,17 @@ _setup_matplotlib_hook()
             document.getElementById('create-file-btn').addEventListener('click', () => {
                 const input = document.getElementById('new-filename-input');
                 const name = input.value.trim();
-                if (name && pyodide) {
-                    try {
-                        pyodide.FS.writeFile(`/home/pyodide/${name}`, '# New file\n');
-                        input.value = '';
-                        refreshVirtualFS();
-                    } catch (err) {
-                        appendConsole(`Create file failed: ${err.message}`, 'error');
-                    }
+                if (name && pyWorker) {
+                    pyWorker.postMessage({ type: 'fs_create', filename: name });
+                    input.value = '';
                 }
             });
 
-            document.getElementById('refresh-fs-btn').addEventListener('click', refreshVirtualFS);
+            document.getElementById('refresh-fs-btn').addEventListener('click', () => {
+                if (pyWorker) pyWorker.postMessage({ type: 'fs_refresh' });
+            });
 
-            // Resizer logic
+            // Layout Resizer logic
             const resizerH = document.getElementById('resizer-h');
             const outputPanel = document.getElementById('output-panel');
             let isResizing = false;
